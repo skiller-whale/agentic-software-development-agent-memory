@@ -1,0 +1,9 @@
+- [Payment sandbox keys](payments-sandbox-keys.md) — Payment provider sandbox keys are rotated monthly by ops — ask in #payments for the current one.
+- [Health check endpoint](health-check-endpoint.md) — The health check endpoint is `/healthz`.
+- [API port](api-port.md) — The API listens on port 9000.
+- [Tests location](tests-location.md) — Tests live in `tests/` and are run with `pytest`.
+- [Commit message convention](commit-message-convention.md) — The team writes conventional commit messages (`feat:`, `fix:`, `chore:`).
+- [Release procedure](release-procedure.md) — Bump the version in config.py, tag `vX.Y.Z`, push tags; CI builds the image.
+- [Never edit .env directly](never-edit-env.md) — Kay was burned by a leaked key; ask before touching `.env`.
+- [No refactors](no-refactors.md) — Kay never wants refactors in this repo — only minimal, surgical changes.
+- [Mobile client retries](mobile-client-retries.md) — The mobile client retries failed requests with exponential backoff (up to 5 attempts), so the API can safely return 503 on transient payment failures.
