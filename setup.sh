@@ -59,7 +59,7 @@ EOF
 # is there (or start from {}), only set the specific keys that suppress the
 # first-launch dialogs, and write the result back. Safe to run every boot —
 # merging is idempotent by construction, unlike a plain overwrite.
-python3 - << 'PYEOF'
+REPO_DIR="$REPO_DIR" python3 - << 'PYEOF'
 import json
 import os
 
@@ -84,7 +84,7 @@ data.setdefault("shiftEnterKeyBindingInstalled", True)
 
 # Per-project "trust this folder?" dialog, once per repo per session.
 projects = data.setdefault("projects", {})
-for project_path in ("/home/learner/notes-app", "/home/learner/orders-api"):
+for project_path in (os.environ["REPO_DIR"] + "/notes-app", os.environ["REPO_DIR"] + "/orders-api"):
     project = projects.setdefault(project_path, {})
     project["hasTrustDialogAccepted"] = True
 
@@ -125,25 +125,25 @@ if ! python3 -m pytest --version >/dev/null 2>&1; then
   pip3 install --user pytest
 fi
 
-# --- notes-app / orders-api: move to $HOME and give them git history ----
-# Two repos live at the top of the learner's home, not nested under
-# $DEFAULT_FOLDER, so their auto-memory store keys are the deterministic
-# ones the module's exercises name
-# (~/.claude/projects/-home-learner-notes-app/memory/ and
-# ~/.claude/projects/-home-learner-orders-api/memory/ — the key is the git
-# root path with `/` -> `-`). Guarded so a VM reboot doesn't re-run the move
-# or clobber a learner's own git history.
-if [ ! -d "$HOME/notes-app" ]; then
-  mv "$REPO_DIR/notes-app" "$HOME/notes-app"
-  cd "$HOME/notes-app"
+# --- notes-app / orders-api: git history, in place ----------------------
+# The editor's workspace root is the cloned public repo ($REPO_DIR), so the
+# two projects stay where they were cloned and become the top-level folders
+# the learner sees. Each gets its own git history (auto memory is keyed by
+# the nearest git root, so each project gets its own store). The outer
+# clone's .git is removed so the workspace is a plain folder and the two
+# projects are not embedded repos inside another repo. Guarded so a VM
+# reboot doesn't rewrite a learner's own history.
+rm -rf "$REPO_DIR/.git"
+
+if [ ! -d "$REPO_DIR/notes-app/.git" ]; then
+  cd "$REPO_DIR/notes-app"
   git init -q -b main
   git add -A
   git -c user.email="learner@example.com" -c user.name="Learner" commit -q -m "Initial notes-app"
 fi
 
-if [ ! -d "$HOME/orders-api" ]; then
-  mv "$REPO_DIR/orders-api" "$HOME/orders-api"
-  cd "$HOME/orders-api"
+if [ ! -d "$REPO_DIR/orders-api/.git" ]; then
+  cd "$REPO_DIR/orders-api"
   git init -q -b main
   # Commit 1: the health endpoint as first built, at /status.
   sed -i "s#self.path == \"/health\"#self.path == \"/status\"#" app.py
@@ -155,39 +155,45 @@ if [ ! -d "$HOME/orders-api" ]; then
   git -c user.email="learner@example.com" -c user.name="Learner" commit -q -am "Rename /status to /health"
 fi
 
+# --- Memory store keys ----------------------------------------------------
+# Claude Code keys a project's auto-memory store by its git root path with
+# every "/" replaced by "-": ~/.claude/projects/<key>/memory/.
+NOTES_KEY="$(printf '%s' "$REPO_DIR/notes-app" | sed 's#/#-#g')"
+ORDERS_KEY="$(printf '%s' "$REPO_DIR/orders-api" | sed 's#/#-#g')"
+NOTES_STORE="$HOME/.claude/projects/$NOTES_KEY/memory"
+ORDERS_STORE="$HOME/.claude/projects/$ORDERS_KEY/memory"
+
 # --- Seed orders-api's memory store --------------------------------------
-# Nine notes from earlier (measured, verified) sessions, at the
-# deterministic key for /home/learner/orders-api. Old mtimes (not the
+# Nine notes from earlier (measured, verified) sessions. Old mtimes (not the
 # frontmatter `modified` field, which the harness ignores for this) trigger
 # the "This memory is N days old" reminder on Read. Guarded so a reboot
 # doesn't re-stamp files the learner's agent has since corrected, and so it
 # NEVER overwrites a store the learner has changed.
-STORE="$HOME/.claude/projects/-home-learner-orders-api/memory"
-if [ ! -d "$STORE" ]; then
-  mkdir -p "$STORE"
-  cp "$REPO_DIR/seed-store"/*.md "$STORE/"
-  touch -t 202608011200 "$STORE"/*.md
+if [ ! -d "$ORDERS_STORE" ]; then
+  mkdir -p "$ORDERS_STORE"
+  cp "$REPO_DIR/seed-store"/*.md "$ORDERS_STORE/"
+  touch -t 202608011200 "$ORDERS_STORE"/*.md
 fi
+mkdir -p "$NOTES_STORE"
 
 # --- Memory folders visible in the editor's file explorer ----------------
-# ~/.claude/projects/<key>/memory/ is a dot-directory, hidden by default, so
-# learners can't browse it from the OpenVSCode file explorer. Symlink it to
-# the top of $HOME under a plain name. mkdir -p on the target is harmless
-# even though the harness (and the seeding step above) already creates it —
-# an empty dir just means an empty-looking folder in the explorer until the
-# store is seeded. Guarded on the symlink itself, not its target, so a
-# reboot doesn't error on an already-existing link.
-mkdir -p "$HOME/.claude/projects/-home-learner-notes-app/memory"
-mkdir -p "$HOME/.claude/projects/-home-learner-orders-api/memory"
-[ -L "$HOME/notes-app-memory" ] || ln -s "$HOME/.claude/projects/-home-learner-notes-app/memory" "$HOME/notes-app-memory"
-[ -L "$HOME/orders-api-memory" ] || ln -s "$HOME/.claude/projects/-home-learner-orders-api/memory" "$HOME/orders-api-memory"
+# ~/.claude/projects/<key>/memory/ is a dot-directory outside the workspace,
+# so learners can't browse it from the file explorer. Symlink each store
+# into the workspace under a plain name; the module's checklists refer to
+# these names. Guarded on the link itself so a reboot doesn't error.
+[ -L "$REPO_DIR/notes-app-memory" ] || ln -s "$NOTES_STORE" "$REPO_DIR/notes-app-memory"
+[ -L "$REPO_DIR/orders-api-memory" ] || ln -s "$ORDERS_STORE" "$REPO_DIR/orders-api-memory"
 
-# --- Clean up the leftover public-repo clone directory -------------------
-# The VM clones the public repo to $REPO_DIR before running this script.
-# Once notes-app/ and orders-api/ have been moved out of it, nothing in
-# there is useful to a learner (seed-store/ has already been copied into
-# the memory store above) — remove it. Only once both repos are confirmed
-# in place, and only that directory: never anything else.
-if [ -d "$HOME/notes-app" ] && [ -d "$HOME/orders-api" ] && [ -d "$REPO_DIR" ]; then
-  rm -rf "$REPO_DIR"
-fi
+# --- Hide the plumbing from the explorer ----------------------------------
+# seed-store/ and this script stay on disk (a reboot re-runs setup.sh from
+# here) but have no business in the learner's view of the workspace.
+mkdir -p "$REPO_DIR/.vscode"
+cat << EOF > "$REPO_DIR/.vscode/settings.json"
+{
+    "files.exclude": {
+        "seed-store": true,
+        "setup.sh": true,
+        ".vscode": true
+    }
+}
+EOF
