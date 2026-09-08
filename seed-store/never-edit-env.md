@@ -8,7 +8,7 @@ metadata:
   modified: 2026-08-01T10:30:00.000Z
 ---
 
-Never edit `.env` directly — Kay was burned by a leaked key.
+Never edit `.env` directly — The user was burned by a leaked key.
 
 **Why:** a previous direct edit to `.env` led to a key being leaked; this is a standing instruction, not a one-off.
 
