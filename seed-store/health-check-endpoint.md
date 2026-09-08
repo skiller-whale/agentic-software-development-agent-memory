@@ -8,8 +8,8 @@ metadata:
   modified: 2026-08-01T10:05:00.000Z
 ---
 
-The health check endpoint is `/healthz`.
+The health check endpoint is `/status`.
 
 **Why:** that's the path the service exposes for liveness checks.
 
-**How to apply:** when wiring up monitoring or curling the service to check it's up, use `/healthz`.
+**How to apply:** when wiring up monitoring or curling the service to check it's up, use `/status`.

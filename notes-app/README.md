@@ -4,8 +4,7 @@ Run it with `python app.py`.
 
 ## Setup
 
-1. Create a venv: `python -m venv .venv && source .venv/bin/activate`
-2. Install dependencies: `pip install -r requirements.txt`
+1. Install dependencies: `pip3 install --user -r requirements.txt`
 
 ## Testing
 

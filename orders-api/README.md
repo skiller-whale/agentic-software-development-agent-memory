@@ -5,10 +5,9 @@ Run it with `python app.py`.
 
 ## Setup
 
-1. Create a venv: `python -m venv .venv && source .venv/bin/activate`
-2. Install dependencies: `pip install -r requirements.txt`
-3. Copy `.env.example` to `.env`
-4. Run the tests: `pytest -q`
+1. Install dependencies: `pip3 install --user -r requirements.txt`
+2. Copy `.env.example` to `.env`
+3. Run the tests: `python3 -m pytest -q`
 
 ## Testing
 

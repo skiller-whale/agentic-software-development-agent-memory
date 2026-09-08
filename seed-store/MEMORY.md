@@ -1,5 +1,5 @@
 - [Payment sandbox keys](payments-sandbox-keys.md) — Payment provider sandbox keys are rotated monthly by ops — ask in #payments for the current one.
-- [Health check endpoint](health-check-endpoint.md) — The health check endpoint is `/healthz`.
+- [Health check endpoint](health-check-endpoint.md) — The health check endpoint is `/status`.
 - [API port](api-port.md) — The API listens on port 9000.
 - [Tests location](tests-location.md) — Tests live in `tests/` and are run with `pytest`.
 - [Commit message convention](commit-message-convention.md) — The team writes conventional commit messages (`feat:`, `fix:`, `chore:`).
