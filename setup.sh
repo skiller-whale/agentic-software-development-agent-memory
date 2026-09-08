@@ -7,58 +7,42 @@
 # reboot, and none of that should be clobbered.
 #
 # Invoked as: bash "$HOME/$DEFAULT_FOLDER/setup.sh" from exercise_config.yaml's
-# startup_commands, with DEFAULT_FOLDER and SW_ATTENDANCE_ID prefixed onto
-# that one simple command by the harness (Train/the emulator) — so both reach
-# this script as real, inherited environment variables. Nothing below needs
-# its own env-var prefix.
+# startup_commands, AFTER the shared `!include* ai/hle_claude_setup.yaml`
+# commands (AWS credentials, Bedrock env in .zshrc, the extension's .vscode
+# settings, .claude.json theme, the CLI install). DEFAULT_FOLDER and
+# SW_ATTENDANCE_ID are prefixed onto that one simple command by the harness
+# (Train/the emulator) — so both reach this script as real, inherited
+# environment variables. Nothing below needs its own env-var prefix.
 set -euo pipefail
 
 REPO_DIR="$HOME/$DEFAULT_FOLDER"
 
-# --- AWS credentials for the Bedrock proxy -----------------------------
-# Cheap to rewrite every boot (deterministic content, no learner state to
-# clobber), so this one is unguarded.
-mkdir -p "$HOME/.aws"
-cat << EOF > "$HOME/.aws/credentials"
-[swbedrock]
-
-aws_access_key_id=${SW_ATTENDANCE_ID}
-aws_secret_access_key=unused
-EOF
-
-# --- .zshrc --------------------------------------------------------------
-# Also unguarded/rewritten every boot — it's fully deterministic and a
-# learner isn't expected to hand-edit their own shell rc for this module.
-# LANG/LC_ALL and PATH are exported FIRST, before the PROMPT line: a fresh
+# --- Shell extras --------------------------------------------------------
+# The shared ai/hle_claude_setup.yaml (spliced into startup_commands before
+# this script) rewrites ~/.zshrc with the Bedrock/model exports every boot.
+# This appends what the module needs on top. LANG/LC_ALL first: a fresh
 # terminal on the real AMI hit `character not in range` on the whale-emoji
-# PROMPT line, which aborts sourcing before the PATH export ever runs — so
-# plain `claude` wasn't on PATH. Setting a UTF-8 locale up front avoids that,
-# and moving PATH up means even if some later line did abort, PATH is safe.
-cat << EOF > "$HOME/.zshrc"
+# PROMPT line, which aborts sourcing before anything after it runs. Guarded
+# by a marker so a re-run without the shared rewrite doesn't duplicate it.
+if ! grep -q '# agent_memory shell extras' "$HOME/.zshrc" 2>/dev/null; then
+  cat << EOF >> "$HOME/.zshrc"
+
+# agent_memory shell extras
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
-export PATH="$HOME/.local/bin:$PATH"
-
-export AWS_REGION="eu-west-1"
-export ANTHROPIC_MODEL="eu.anthropic.claude-sonnet-5"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="eu.anthropic.claude-sonnet-5"
-export ANTHROPIC_DEFAULT_HAIKU_MODEL="eu.anthropic.claude-haiku-4-5-20251001-v1:0"
-export BEDROCK_MODEL="eu.anthropic.claude-sonnet-5"
-export ANTHROPIC_BEDROCK_BASE_URL="https://bedrock-runtime.aws-proxy.skillerwhale.com"
-export CLAUDE_CODE_USE_BEDROCK="1"
-export AWS_ACCESS_KEY_ID="${SW_ATTENDANCE_ID}"
-export AWS_SECRET_ACCESS_KEY="unused"
-
+export PATH="$HOME/.local/bin:\$PATH"
 export PROMPT=\$'%{\e[1m%}🐳 %{\e[1;32m%}%n@%{\e[0m%}:%{\e[1;34m%}%1~%{\e[0m%} \$ '
 alias python='python3'
 EOF
+fi
 
-# --- ~/.claude.json: theme + onboarding + per-project trust -------------
-# A learner may have changed other keys in here (model choice, tips, etc.)
-# since the last boot, so this is a merge, not an overwrite: load whatever
-# is there (or start from {}), only set the specific keys that suppress the
-# first-launch dialogs, and write the result back. Safe to run every boot —
-# merging is idempotent by construction, unlike a plain overwrite.
+# --- ~/.claude.json: onboarding + per-project trust ----------------------
+# The shared setup writes this file with just the theme. A learner may also
+# have changed keys in here (model choice, tips, etc.) since the last boot,
+# so this is a merge, not an overwrite: load whatever is there (or start
+# from {}), only set the specific keys that suppress the first-launch
+# dialogs, and write the result back. Safe to run every boot — merging is
+# idempotent by construction, unlike a plain overwrite.
 REPO_DIR="$REPO_DIR" python3 - << 'PYEOF'
 import json
 import os
@@ -105,20 +89,16 @@ cat << EOF > "$HOME/.claude/settings.json"
 }
 EOF
 
-# --- Claude Code CLI -------------------------------------------------
-# Pinned to the version the lab measurements were run against
-# (agent-memory-experiments.md) so the module's behavioural claims hold on
-# the VM. Guarded: a reboot shouldn't re-fetch and reinstall over the
-# network every time when the right version is already there. No sudo on
-# the AMI (verified 28 Aug 2026: apt-get fails silently), so this and every
-# other install below lands in ~/.local/bin, which the .zshrc above puts on
-# PATH.
+# --- Claude Code CLI version pin ------------------------------------------
+# The shared setup installs the latest CLI. This module's behavioural claims
+# were measured on 2.1.263 (agent-memory-experiments.md), so if the shared
+# install produced anything else, install the pinned build over it. Guarded,
+# so a reboot with the right version already there does nothing. No sudo on
+# the AMI (verified 28 Aug 2026), so this lands in ~/.local/bin like the
+# shared install does.
 if ! "$HOME/.local/bin/claude" --version 2>/dev/null | grep -q '^2\.1\.263'; then
   curl -fsSL https://claude.ai/install.sh | bash -s 2.1.263
 fi
-
-mkdir -p "$HOME/.claude/projects"
-touch "$HOME/.claude/history.jsonl"
 
 # pytest, for the projects' test suites. Guarded so a reboot doesn't hit the
 # network (and the package index) every time it's already installed.
@@ -202,14 +182,28 @@ mkdir -p "$NOTES_STORE" "$SHORTENER_STORE"
 
 # --- Hide the plumbing from the explorer ----------------------------------
 # seed-store/ and this script stay on disk (a reboot re-runs setup.sh from
-# here) but have no business in the learner's view of the workspace.
+# here) but have no business in the learner's view of the workspace. The
+# shared setup has already written .vscode/settings.json with the Claude
+# Code extension's settings, so this merges files.exclude into it rather
+# than overwriting.
 mkdir -p "$REPO_DIR/.vscode"
-cat << EOF > "$REPO_DIR/.vscode/settings.json"
-{
-    "files.exclude": {
-        "seed-store": true,
-        "setup.sh": true,
-        ".vscode": true
-    }
-}
-EOF
+REPO_DIR="$REPO_DIR" python3 - << 'PYEOF'
+import json
+import os
+
+path = os.path.join(os.environ["REPO_DIR"], ".vscode", "settings.json")
+try:
+    with open(path) as f:
+        data = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    data = {}
+
+data.setdefault("files.exclude", {}).update({
+    "seed-store": True,
+    "setup.sh": True,
+    ".vscode": True,
+})
+
+with open(path, "w") as f:
+    json.dump(data, f, indent=4)
+PYEOF
