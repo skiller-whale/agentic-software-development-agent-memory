@@ -24,12 +24,17 @@ REPO_DIR="$HOME/$DEFAULT_FOLDER"
 # terminal on the real AMI hit `character not in range` on the whale-emoji
 # PROMPT line, which aborts sourcing before anything after it runs. Guarded
 # by a marker so a re-run without the shared rewrite doesn't duplicate it.
+# DISABLE_AUTOUPDATER keeps the pinned CLI pinned: on the 8 Sep 2026 VM
+# run-through Claude Code updated itself from 2.1.263 to 2.1.265 between
+# exercises, which would quietly undo the version the module's behavioural
+# claims were measured on.
 if ! grep -q '# agent_memory shell extras' "$HOME/.zshrc" 2>/dev/null; then
   cat << EOF >> "$HOME/.zshrc"
 
 # agent_memory shell extras
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
+export DISABLE_AUTOUPDATER=1
 export PATH="$HOME/.local/bin:\$PATH"
 export PROMPT=\$'%{\e[1m%}🐳 %{\e[1;32m%}%n@%{\e[0m%}:%{\e[1;34m%}%1~%{\e[0m%} \$ '
 alias python='python3'
