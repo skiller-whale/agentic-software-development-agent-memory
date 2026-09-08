@@ -190,13 +190,25 @@ mkdir -p "$REPO_DIR/.vscode"
 REPO_DIR="$REPO_DIR" python3 - << 'PYEOF'
 import json
 import os
+import re
 
 path = os.path.join(os.environ["REPO_DIR"], ".vscode", "settings.json")
+# The shared setup's settings.json carries a trailing comma (fine for VS
+# Code's JSONC parser, fatal for json.load), so strip trailing commas
+# before giving up — losing the file would drop the extension's Bedrock
+# config, and the extension would then ask the learner to log in.
 try:
     with open(path) as f:
-        data = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
-    data = {}
+        raw = f.read()
+except FileNotFoundError:
+    raw = ""
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError:
+    try:
+        data = json.loads(re.sub(r",\s*([\]}])", r"\1", raw))
+    except json.JSONDecodeError:
+        data = {}
 
 data.setdefault("files.exclude", {}).update({
     "seed-store": True,
