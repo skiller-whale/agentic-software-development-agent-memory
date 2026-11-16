@@ -73,7 +73,7 @@ data.setdefault("shiftEnterKeyBindingInstalled", True)
 
 # Per-project "trust this folder?" dialog, once per repo per session.
 projects = data.setdefault("projects", {})
-for project in ("notes-app", "orders-api", "url-shortener"):
+for project in ("notes-app", "orders-api"):
     project_path = os.environ["REPO_DIR"] + "/" + project
     project = projects.setdefault(project_path, {})
     project["hasTrustDialogAccepted"] = True
@@ -111,7 +111,7 @@ if ! python3 -m pytest --version >/dev/null 2>&1; then
   pip3 install --user pytest
 fi
 
-# --- notes-app / orders-api / url-shortener: git history, in place --------
+# --- notes-app / orders-api: git history, in place ------------------------
 # The editor's workspace root is the cloned public repo ($REPO_DIR), so the
 # projects stay where they were cloned and become the top-level folders the
 # learner sees. Each gets its own git history (auto memory is keyed by the
@@ -142,29 +142,16 @@ if [ ! -d "$REPO_DIR/orders-api/.git" ]; then
   git -c user.email="learner@example.com" -c user.name="Learner" commit -q -am "Rename /status to /health"
 fi
 
-# url-shortener is the prompt-injection project (ex 4): its README carries
-# the note addressed to AI agents, and nothing else of interest, so the
-# note can't be tripped over during the orders-api exercises. Its memory
-# store starts empty.
-if [ ! -d "$REPO_DIR/url-shortener/.git" ]; then
-  cd "$REPO_DIR/url-shortener"
-  git init -q -b main
-  git add -A
-  git -c user.email="learner@example.com" -c user.name="Learner" commit -q -m "Initial url-shortener"
-fi
-
 # --- Memory store keys ----------------------------------------------------
 # Claude Code keys a project's auto-memory store by its git root path with
 # every "/" replaced by "-": ~/.claude/projects/<key>/memory/.
 NOTES_KEY="$(printf '%s' "$REPO_DIR/notes-app" | sed 's#/#-#g')"
 ORDERS_KEY="$(printf '%s' "$REPO_DIR/orders-api" | sed 's#/#-#g')"
-SHORTENER_KEY="$(printf '%s' "$REPO_DIR/url-shortener" | sed 's#/#-#g')"
 NOTES_STORE="$HOME/.claude/projects/$NOTES_KEY/memory"
 ORDERS_STORE="$HOME/.claude/projects/$ORDERS_KEY/memory"
-SHORTENER_STORE="$HOME/.claude/projects/$SHORTENER_KEY/memory"
 
 # --- Seed orders-api's memory store --------------------------------------
-# Nine notes from earlier (measured, verified) sessions. Old mtimes (not the
+# Ten notes from earlier (measured, verified) sessions. Old mtimes (not the
 # frontmatter `modified` field, which the harness ignores for this) trigger
 # the "This memory is N days old" reminder on Read. Guarded so a reboot
 # doesn't re-stamp files the learner's agent has since corrected, and so it
@@ -174,7 +161,7 @@ if [ ! -d "$ORDERS_STORE" ]; then
   cp "$REPO_DIR/seed-store"/*.md "$ORDERS_STORE/"
   touch -t 202608011200 "$ORDERS_STORE"/*.md
 fi
-mkdir -p "$NOTES_STORE" "$SHORTENER_STORE"
+mkdir -p "$NOTES_STORE"
 
 # --- Memory folders visible in the editor's file explorer ----------------
 # ~/.claude/projects/<key>/memory/ is a dot-directory outside the workspace,
@@ -183,7 +170,6 @@ mkdir -p "$NOTES_STORE" "$SHORTENER_STORE"
 # these names. Guarded on the link itself so a reboot doesn't error.
 [ -L "$REPO_DIR/notes-app-memory" ] || ln -s "$NOTES_STORE" "$REPO_DIR/notes-app-memory"
 [ -L "$REPO_DIR/orders-api-memory" ] || ln -s "$ORDERS_STORE" "$REPO_DIR/orders-api-memory"
-[ -L "$REPO_DIR/url-shortener-memory" ] || ln -s "$SHORTENER_STORE" "$REPO_DIR/url-shortener-memory"
 
 # --- Hide the plumbing from the explorer ----------------------------------
 # seed-store/ and this script stay on disk (a reboot re-runs setup.sh from
